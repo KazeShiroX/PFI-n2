@@ -21,23 +21,28 @@ public class TransferController {
     public ResponseEntity<?> transfer(
             HttpServletRequest request,
             @RequestBody Map<String, Object> body) {
+        try {
+            String toUser  = (String) body.get("toUser");
+            BigDecimal amount = new BigDecimal(body.get("amount").toString());
 
-        String toUser  = (String) body.get("toUser");
-        BigDecimal amount = new BigDecimal(body.get("amount").toString());
+            // El fromUser viene del token JWT seteado por JwtFilter en los atributos de la petición
+            String fromUser = (String) request.getAttribute("username");
 
-        // El fromUser viene del token JWT seteado por JwtFilter en los atributos de la petición
-        String fromUser = (String) request.getAttribute("username");
+            if (fromUser == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized: Missing user in token"));
+            }
 
-        if (fromUser == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized: Missing user in token"));
+            Transaction tx = transferService.processTransfer(fromUser, toUser, amount);
+
+            return ResponseEntity.ok(Map.of(
+                "status", "ok",
+                "txId", tx.getId(),
+                "amount", tx.getAmount()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error al procesar la transferencia: " + e.getMessage()));
         }
-
-        Transaction tx = transferService.processTransfer(fromUser, toUser, amount);
-
-        return ResponseEntity.ok(Map.of(
-            "status", "ok",
-            "txId", tx.getId(),
-            "amount", tx.getAmount()
-        ));
     }
 }
