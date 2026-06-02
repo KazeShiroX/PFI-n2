@@ -13,6 +13,8 @@ def on_connect(client, userdata, flags, rc):
     else:
         print(f"[ANTIFRAUD] Error de conexión, código: {rc}")
 
+import requests
+
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
@@ -23,8 +25,14 @@ def on_message(client, userdata, msg):
 
         if amount >= 10000:
             print(f"[ANTIFRAUD] ⚠ Transacción sospechosa detectada: {tx_id} por ${amount}")
-            # aquí puedes agregar lógica adicional
-            # por ejemplo: guardar en BD, enviar notificación, etc.
+            node1_url = os.getenv("NODE1_URL")
+            if node1_url:
+                url = f"{node1_url}/servlet/fraud-result"
+                print(f"[ANTIFRAUD] Notificando resultado al Servlet del Nodo 1 en: {url}")
+                resp = requests.post(url, json={"txId": tx_id, "flagged": True})
+                print(f"[ANTIFRAUD] Respuesta del Nodo 1: {resp.status_code} | {resp.text}")
+            else:
+                print("[ANTIFRAUD] Advertencia: NODE1_URL no configurado en las variables de entorno.")
 
     except Exception as e:
         print(f"[ANTIFRAUD] Error procesando mensaje: {e}")
