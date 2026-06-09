@@ -1,31 +1,65 @@
 services:
-  auth:
-    build: ./auth-service
+  db-replica:
+    image: bitnamilegacy/postgresql:15
+    container_name: db-replica
+    environment:
+      - POSTGRESQL_PASSWORD=1234
+      - POSTGRESQL_POSTGRES_PASSWORD=1234
+      - POSTGRESQL_MASTER_HOST=172.20.0.20
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - PEER_IP=172.20.0.20
+    networks:
+      banco_network:
+        ipv4_address: 172.20.0.30
     ports:
-      - "8001:8000"
-    env_file: .env
+      - "5433:5432"
+    volumes:
+      - ./recover.sh:/usr/local/bin/recover.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/recover.sh"]
+    restart: unless-stopped
+    depends_on:
+      - db-replica-precheck
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+
+  db-replica-precheck:
+    image: busybox
+    command: sh -c "until nc -z 172.20.0.20 5432; do echo waiting for master; sleep 2; done"
     networks:
       - banco_network
+
+  auth:
+    build: ./auth-service
+    network_mode: "service:db-replica"
+    env_file: .env
+    depends_on:
+      db-replica:
+        condition: service_healthy
 
   core:
     build: ./core-bancario
-    ports:
-      - "8081:8080"
+    network_mode: "service:db-replica"
     env_file: .env
-    networks:
-      - banco_network
     depends_on:
-      - auth
-      - mqtt
+      db-replica:
+        condition: service_healthy
+      auth:
+        condition: service_started
 
   mqtt:
     build: ./mqtt-service
-    ports:
-      - "1883:1883"
-      - "9000:9000"
+    network_mode: "service:db-replica"
     env_file: .env
-    networks:
-      - banco_network
+    depends_on:
+      db-replica:
+        condition: service_healthy
 
 networks:
   banco_network:
